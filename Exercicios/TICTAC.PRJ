@@ -1,0 +1,2 @@
+tictac(system.h system.obj)
+system(system.h)
