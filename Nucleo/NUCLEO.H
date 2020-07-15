@@ -24,4 +24,5 @@ extern void far dispara_sistema();
 extern void far inicia_semaforo(semaforo (*sem), int n);
 extern void far P(semaforo (*sem));
 extern void far V(semaforo (*sem));
+extern char* far nome_proc_atual();
 

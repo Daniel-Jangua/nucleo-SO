@@ -37,6 +37,14 @@ void far inicia_semaforo(semaforo *sem, int n){
     sem->Q = NULL;
 }
 
+char* far nome_proc_atual(){
+    char nomep[35] = "";
+    if(prim == NULL)
+        return nomep;
+    strcpy(nomep,prim->nome);
+    return nomep; 
+}
+
 void far criar_processo(char nomep[35], void far (*proc)()){
     PTR_DESC_PROC p_aux;
     p_aux = (PTR_DESC_PROC)malloc(sizeof(struct desc_p));
