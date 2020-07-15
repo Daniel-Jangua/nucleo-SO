@@ -42,6 +42,7 @@ void far criar_processo(char nomep[35], void far (*proc)()){
     p_aux = (PTR_DESC_PROC)malloc(sizeof(struct desc_p));
     strcpy(p_aux->nome,nomep);
     p_aux->estado = ativo;
+    p_aux->fila_sem = NULL;
     p_aux->contexto = cria_desc();
     newprocess(proc,p_aux->contexto);
 
@@ -79,6 +80,53 @@ PTR_DESC_PROC far procura_prox_ativo(){
     if(p->estado == ativo)
         return p;
     return NULL;
+}
+
+void far P(semaforo *sem){
+    PTR_DESC_PROC p_aux;
+    disable();
+    if(sem->s > 0)
+        sem->s--;
+    else{
+        prim->estado = bloq_p;
+        p_aux = sem->Q;
+        /*se a fila estiver vazia*/
+        if(p_aux == NULL)
+            sem->Q = prim;
+        else{
+            /*posiciona o ponteiro no ultimo elemento da fila*/
+            while(p_aux->fila_sem != NULL)
+                p_aux = p_aux->fila_sem;
+            /*insere o prim no final da fila Q*/
+            p_aux->fila_sem = prim;
+        }
+        p_aux = prim;
+        /*encontra o proximo processo ativo para rodar*/
+        if((prim = procura_prox_ativo()) == NULL){
+            /*todos bloqueados/terminados - deadlock*/
+            volta_dos();
+        }
+        /*passa o controle para o proximo processo rodar (enable() implícito)*/
+        transfer(p_aux->contexto,prim->contexto);
+    }
+    enable();
+}
+
+void far V(semaforo *sem){
+    PTR_DESC_PROC p_aux;
+    disable();
+    /*Se a fila não está vazia, retira o primeiro da fila*/
+    if(sem->Q != NULL){
+        sem->Q->estado = ativo;
+        p_aux = sem->Q;
+        /*retirando o primeiro da fila*/
+        sem->Q = sem->Q->fila_sem;
+        p_aux->fila_sem = NULL;
+    }else{
+        /*A fila está vazia*/
+        sem->s++;
+    }
+    enable();
 }
 
 void far escalador(){
