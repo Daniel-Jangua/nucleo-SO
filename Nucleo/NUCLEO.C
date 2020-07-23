@@ -3,6 +3,7 @@
 #include<stdlib.h>
 #include<string.h>
 
+/*Descritor dos processos*/
 typedef struct desc_p{
     char nome[35];
     enum{ativo, bloq_p, terminado} estado;
@@ -17,6 +18,7 @@ typedef struct resgistros{
     unsigned bx1,es1;
 }regis;
 
+/*Estrutura que aponta se o processo esta na regiao critica do DOS*/
 typedef union k{
     regis x;
     char far *y;
@@ -24,6 +26,7 @@ typedef union k{
 
 APONTA_REG_CRIT a;
 
+/*Definição do semaforo*/
 typedef struct{
     int s;
     PTR_DESC_PROC Q;
@@ -32,11 +35,13 @@ typedef struct{
 PTR_DESC_PROC prim = NULL;
 PTR_DESC d_esc;
 
+/*funcao para o usuario iniciar um semaforo*/
 void far inicia_semaforo(semaforo *sem, int n){
     sem->s = n;
     sem->Q = NULL;
 }
 
+/*funcao que retorna o nome do processo corrente*/
 char* far nome_proc_atual(){
     char nomep[35] = "";
     if(prim == NULL)
@@ -45,15 +50,16 @@ char* far nome_proc_atual(){
     return nomep; 
 }
 
+/*funcao para criar um processo a partir de uma co-rotina*/
 void far criar_processo(char nomep[35], void far (*proc)()){
     PTR_DESC_PROC p_aux;
-    p_aux = (PTR_DESC_PROC)malloc(sizeof(struct desc_p));
-    strcpy(p_aux->nome,nomep);
-    p_aux->estado = ativo;
-    p_aux->fila_sem = NULL;
-    p_aux->contexto = cria_desc();
-    newprocess(proc,p_aux->contexto);
-
+    p_aux = (PTR_DESC_PROC)malloc(sizeof(struct desc_p));       /*Aloca a estrutura do descritor de processo*/
+    strcpy(p_aux->nome,nomep);                                  /*Atribui nome ao processo*/
+    p_aux->estado = ativo;                                      /*Define estado como ativo*/
+    p_aux->fila_sem = NULL;                                     
+    p_aux->contexto = cria_desc();                              /*Cria a estrutura que guarda o contexto do processo*/
+    newprocess(proc,p_aux->contexto);                           /*Associa a estrutura ao processo*/
+    /*Inserirndo o novo processo no final da fila dos processos correntes*/
     if(prim == NULL){
         prim = p_aux;
     }else{
@@ -65,6 +71,7 @@ void far criar_processo(char nomep[35], void far (*proc)()){
     p_aux->prox_desc = prim;
 }
 
+/*Funcao que muda o estado do processo para "terminado"*/
 void far terminar_processo(){
     disable();
     prim->estado = terminado;
@@ -72,6 +79,7 @@ void far terminar_processo(){
     while(1);
 }
 
+/*Funcao que restaura o vetor de interrupcoes devolvendo o controle ao DOS*/
 void far volta_dos(){
     disable();
     setvect(8,p_est->int_anterior);
@@ -79,17 +87,19 @@ void far volta_dos(){
     exit(0);
 }
 
+/*Funcao que retorna o proximo processo ativo para ser escalado*/
 PTR_DESC_PROC far procura_prox_ativo(){
     PTR_DESC_PROC p = prim;
-    while((p = p->prox_desc) != prim){
+    while((p = p->prox_desc) != prim){          /*Percorre toda a fila circular em busca do primeiro processo ativo*/
         if(p->estado == ativo)
             return p;
     }
-    if(p->estado == ativo)
-        return p;
-    return NULL;
+    if(p->estado == ativo)                      /*Se percorreu todos e voltou a cabeca da fila-> se este processe esta ativo ele e escalado*/
+        return p;               
+    return NULL;                                /*Caso contrario, nenhum processo ativo para rodar, retorna NULL*/
 }
 
+/*Primitiva P do mecanismo de semaforo*/
 void far P(semaforo *sem){
     PTR_DESC_PROC p_aux;
     disable();
@@ -120,6 +130,7 @@ void far P(semaforo *sem){
     enable();
 }
 
+/*Primitiva V do mecanismo de semaforo*/
 void far V(semaforo *sem){
     PTR_DESC_PROC p_aux;
     disable();
@@ -137,33 +148,37 @@ void far V(semaforo *sem){
     enable();
 }
 
+/*Funcao do escalador, que implementa o algoritmo Round Robin*/
 void far escalador(){
-    p_est->p_origem = d_esc;
+    /*Cofigura a estrutura global que representa a passagem de parametro da funcao iotransfer*/
+    p_est->p_origem = d_esc;                        
     p_est->p_destino = prim->contexto;
     p_est->num_vetor = 8;
+    /*Preparando para verificacao se o processo esta na regiao critica do DOS*/
     _AH=0x34;
     _AL=0x00;
     geninterrupt(0x21);
     a.x.bx1 = _BX;
     a.x.es1 = _ES;
     while(1){
-        iotransfer();
+        iotransfer();                                       /*Transfere o controle para o processo escalado*/
         disable();
-        if(!*a.y){
-            if((prim = procura_prox_ativo()) == NULL)
-                volta_dos();
+        if(!*a.y){                                          /*Se o processoa nao esta ma regiao critica, escala outro*/
+            if((prim = procura_prox_ativo()) == NULL)       /*Caso contrario, o mesmo ganha mais uma fatia de tempo*/
+                volta_dos();                                /*Caso nao esxistam mais processos ativos, reotorna o controle ao DOS*/
             p_est->p_destino = prim->contexto;
-        }
+        }                                   
         enable();
     }
 }
 
+/*Funcao para o usuario colocar os processos para rodar*/
 void far dispara_sistema(){
-    PTR_DESC desc_dispara;
-    d_esc = cria_desc();
-    desc_dispara = cria_desc();
-    newprocess(escalador,d_esc);
-    transfer(desc_dispara,d_esc);
+    PTR_DESC desc_dispara;              
+    d_esc = cria_desc();                                    /*Cria contexto para o escalador*/
+    desc_dispara = cria_desc();                             /*Cria contexto para a funcao dispara*/
+    newprocess(escalador,d_esc);                            /*Associa o escalador ao seu descritor*/
+    transfer(desc_dispara,d_esc);                           /*Transfere o controle para o escalador*/
 }
 
 
